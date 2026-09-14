@@ -21,6 +21,7 @@ import {
   assertAtcPriority,
   assertPercent,
   atcToCheckstyle,
+  diagnoseCiQualityFailed,
   evaluateAtc,
   evaluateAunit,
   evaluateDiff,
@@ -32,7 +33,6 @@ import {
   lintToCheckstyle,
   type StructuredDiffResult,
 } from './cli-checks.js';
-import { diagnoseCiQualityFailed } from './handlers/diagnose.js';
 import { getToolRegistry, handleToolCall } from './handlers/dispatch.js';
 import { setCachedDiscovery, setCachedFeatures } from './handlers/feature-cache.js';
 import { errorResult, type ToolResult } from './handlers/shared.js';

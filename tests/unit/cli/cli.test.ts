@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnoseCiQualityFailed } from '../../../src/handlers/diagnose.js';
+import { diagnoseCiQualityFailed } from '../../../src/cli-checks.js';
 import { getToolSchema } from '../../../src/handlers/schemas.js';
 import { textResult, toolJson } from '../../../src/handlers/shared.js';
 import { detectFilename } from '../../../src/lint/lint.js';
@@ -39,8 +39,7 @@ describe('CLI', () => {
     };
     const aunitArgs = {
       action: 'unittest_ci',
-      softwareComponents: ['/DMO/SWC'],
-      evaluateResults: true,
+      packages: ['Z_TEST'],
     };
     expect(schema.safeParse(atcArgs).success).toBe(true);
     expect(schema.safeParse(aunitArgs).success).toBe(true);

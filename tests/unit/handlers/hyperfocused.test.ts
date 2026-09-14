@@ -77,7 +77,6 @@ describe('hyperfocused mode', () => {
           action: 'atc_ci',
           packages: ['Z_TEST'],
           packageTrees: ['Z_TEST_TREE'],
-          softwareComponents: ['/DMO/SWC'],
           variant: 'ABAP_CLOUD_DEVELOPMENT_DEFAULT',
           failOnSeverity: 'warning',
           timeoutSeconds: 120,
@@ -98,11 +97,8 @@ describe('hyperfocused mode', () => {
         action: 'diagnose',
         params: {
           action: 'unittest_ci',
-          softwareComponents: ['/DMO/SWC'],
-          ownTests: true,
-          harmless: true,
-          short: true,
-          evaluateResults: true,
+          packages: ['Z_TEST'],
+          includeReportXml: true,
           timeoutSeconds: 90,
         },
       });
@@ -111,8 +107,8 @@ describe('hyperfocused mode', () => {
         expect(aunit.toolName).toBe('SAPDiagnose');
         expect(aunit.expandedArgs).toMatchObject({
           action: 'unittest_ci',
-          softwareComponents: ['/DMO/SWC'],
-          evaluateResults: true,
+          packages: ['Z_TEST'],
+          includeReportXml: true,
           timeoutSeconds: 90,
         });
       }

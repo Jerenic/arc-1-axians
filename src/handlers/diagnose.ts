@@ -22,8 +22,6 @@ import {
   type AunitPackageSelection,
   resolveAunitPackageSelection,
 } from '../adt/aunit-package.js';
-import { runAtcCiCheck, runAunitCiCheck } from '../adt/ci-quality.js';
-import type { AtcCiSeverity } from '../adt/ci-quality-xml.js';
 import type { AdtClient, SourceReadOptions, SourceReadResult } from '../adt/client.js';
 import { DataSourcePolicyError } from '../adt/data-source-policy.js';
 import {
@@ -69,6 +67,7 @@ import type {
   UnitTestResult,
 } from '../adt/types.js';
 import { getCurrentContext } from '../server/context.js';
+import { handleCiQuality } from './diagnose-ci.js';
 import { isBtpSystem } from './feature-cache.js';
 import { classIncludeUrl, normalizeObjectType, objectUrlForType, sourceUrlForType } from './object-types.js';
 import { errorResult, type ToolResult, textResult, toolJson } from './shared.js';
@@ -81,6 +80,7 @@ const AUNIT_SOURCE_REQUEST_LIMIT = 500;
 interface AunitEvidenceBudget {
   deadline: number;
   remainingSourceRequests: number;
+  signal?: AbortSignal;
 }
 
 class AunitSourceBudgetError extends Error {
@@ -93,7 +93,7 @@ class AunitSourceBudgetError extends Error {
 function reserveAunitSourceRequests(budget: AunitEvidenceBudget, count = 1): SourceReadOptions {
   if (budget.remainingSourceRequests < count) throw new AunitSourceBudgetError();
   budget.remainingSourceRequests -= count;
-  return { deadline: budget.deadline };
+  return { deadline: budget.deadline, signal: budget.signal };
 }
 
 function isAunitDeadlineFailure(error: unknown): boolean {
@@ -551,7 +551,7 @@ async function runLegacyAunitForSelection(
   try {
     return await runUnitTests(client.http, client.safety, objectUrls, {
       coverage,
-      requestOptions: { deadline: budget.deadline },
+      requestOptions: { deadline: budget.deadline, signal: budget.signal },
     });
   } catch (error) {
     if (isAunitDeadlineFailure(error)) {
@@ -636,7 +636,11 @@ export function toLegacyAunitResults(result: AunitRunResult): UnitTestResult[] {
   return rows;
 }
 
-export async function handleSAPDiagnose(client: AdtClient, args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleSAPDiagnose(
+  client: AdtClient,
+  args: Record<string, unknown>,
+  options: { deadline?: number; signal?: AbortSignal } = {},
+): Promise<ToolResult> {
   const action = String(args.action ?? '');
   const name = String(args.name ?? '');
   const type = normalizeObjectType(String(args.type ?? ''));
@@ -682,7 +686,8 @@ export async function handleSAPDiagnose(client: AdtClient, args: Record<string, 
       const timeoutMs =
         args.timeoutSeconds === undefined ? DEFAULT_PUBLIC_AUNIT_TIMEOUT_MS : Number(args.timeoutSeconds) * 1000;
       const evidenceBudget: AunitEvidenceBudget = {
-        deadline: Date.now() + timeoutMs,
+        deadline: Math.min(Date.now() + timeoutMs, options.deadline ?? Infinity),
+        signal: options.signal ?? getCurrentContext()?.signal,
         remainingSourceRequests: AUNIT_SOURCE_REQUEST_LIMIT,
       };
 
@@ -691,6 +696,7 @@ export async function handleSAPDiagnose(client: AdtClient, args: Record<string, 
         try {
           publicAvailable = await probePublicAunit(client.http, client.safety, {
             deadline: evidenceBudget.deadline,
+            signal: evidenceBudget.signal,
           });
         } catch (error) {
           if (!isAunitDeadlineFailure(error)) throw error;
@@ -722,6 +728,7 @@ export async function handleSAPDiagnose(client: AdtClient, args: Record<string, 
               includeSubpackages,
               timeoutMs,
               deadline: evidenceBudget.deadline,
+              signal: evidenceBudget.signal,
             });
           } catch (error) {
             if (!(error instanceof AunitIncompleteError)) throw error;
@@ -871,26 +878,9 @@ export async function handleSAPDiagnose(client: AdtClient, args: Record<string, 
           'Coverage unavailable on this system (the coverage-measurement endpoint or measurement result was not available).';
       return textResult(toolJson(out));
     }
-    case 'unittest_ci': {
-      const result = await runAunitCiCheck(client.http, client.safety, {
-        origin: client.baseUrl,
-        objectSet: ciObjectSetFromArgs(args),
-        title: optionalString(args.title),
-        context: optionalString(args.context),
-        ownTests: optionalBoolean(args.ownTests),
-        foreignTests: optionalBoolean(args.foreignTests),
-        harmless: optionalBoolean(args.harmless),
-        dangerous: optionalBoolean(args.dangerous),
-        critical: optionalBoolean(args.critical),
-        short: optionalBoolean(args.short),
-        medium: optionalBoolean(args.medium),
-        long: optionalBoolean(args.long),
-        measurements: optionalString(args.measurements),
-        evaluateResults: optionalBoolean(args.evaluateResults),
-        timeoutSeconds: optionalNumber(args.timeoutSeconds),
-      });
-      return textResult(toolJson(result));
-    }
+    case 'unittest_ci':
+    case 'atc_ci':
+      return handleCiQuality(client, args, handleSAPDiagnose);
     case 'atc': {
       if (args.objects !== undefined) {
         const objects = (args.objects as { type: AtcBatchObject['type']; name: string }[]).map((object) => ({
@@ -926,17 +916,6 @@ export async function handleSAPDiagnose(client: AdtClient, args: Record<string, 
       return textResult(
         toolJson({ findings: result.findings, variant: result.variant, variantSource: result.variantSource }),
       );
-    }
-    case 'atc_ci': {
-      const result = await runAtcCiCheck(client.http, client.safety, {
-        origin: client.baseUrl,
-        objectSet: ciObjectSetFromArgs(args),
-        variant: optionalString(args.variant),
-        configuration: optionalString(args.configuration),
-        failOnSeverity: optionalAtcSeverity(args.failOnSeverity),
-        timeoutSeconds: optionalNumber(args.timeoutSeconds),
-      });
-      return textResult(toolJson(result));
     }
     case 'atc_variants': {
       // Discover which check variant to pass to action="atc": the system default (which action="atc"
@@ -1266,53 +1245,6 @@ export async function handleSAPDiagnose(client: AdtClient, args: Record<string, 
         `Unknown SAPDiagnose action: ${action}. Supported: syntax, unittest, unittest_ci, atc, atc_ci, atc_variants, cds_testcases, object_state, quickfix, apply_quickfix, dumps, traces, trace_start, trace_requests, trace_cancel, system_messages, gateway_errors, odata_perf, cds_sql, sql_trace_state, set_sql_trace_state, sql_trace_directory, authorization_trace`,
       );
   }
-}
-
-/** Only an explicit completed, passing CI quality report may make the CLI green. */
-export function diagnoseCiQualityFailed(args: Record<string, unknown>, result: ToolResult): boolean {
-  const action = String(args.action ?? '');
-  if (action !== 'atc_ci' && action !== 'unittest_ci') return false;
-  if (result.isError) return true;
-  const text = result.content.find((block) => block.type === 'text')?.text;
-  if (!text) return true;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true;
-    const report = parsed as { status?: unknown; fail?: unknown };
-    return report.status !== 'completed' || report.fail !== false;
-  } catch {
-    return true;
-  }
-}
-
-function ciObjectSetFromArgs(args: Record<string, unknown>) {
-  return {
-    packages: asStringArray(args.packages),
-    packageTrees: asStringArray(args.packageTrees),
-    softwareComponents: asStringArray(args.softwareComponents),
-  };
-}
-
-function asStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  return value.map((item) => String(item));
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-function optionalBoolean(value: unknown): boolean | undefined {
-  return typeof value === 'boolean' ? value : undefined;
-}
-
-function optionalNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function optionalAtcSeverity(value: unknown): AtcCiSeverity | undefined {
-  if (value === 'error' || value === 'warning' || value === 'info') return value;
-  return undefined;
 }
 
 function selectDumpSections(detail: DumpDetail, requestedSections: unknown): Record<string, string> {

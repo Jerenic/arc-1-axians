@@ -92,6 +92,7 @@ describe('CLI runtime', () => {
       'null',
       '[]',
       '{"status":"running","fail":false}',
+      '{"status":"incomplete","fail":false,"summary":{"tests":0}}',
       '{"status":"completed","fail":"false"}',
     ]) {
       const code = await main(

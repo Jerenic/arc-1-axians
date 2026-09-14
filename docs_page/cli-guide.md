@@ -91,8 +91,10 @@ The headless quality actions `SAPDiagnose.atc_ci` and `SAPDiagnose.unittest_ci`
 also evaluate their CI outcome: `status: "completed"` with `fail: false` exits `0`;
 `fail: true`, tool errors, or missing/malformed/incomplete outcome fields exit `1`.
 Text and JSON output retain the report even when the quality gate fails. This
-does not change MCP `isError`. The action's configured threshold (or ABAP Unit's
-`evaluateResults: false`) controls the returned `fail` value; the CLI honors it.
+does not change MCP `isError`. ATC uses the requested severity threshold. AUnit is harmless-only and incomplete
+or empty evidence always fails. Use `includeReportXml:true` to request bounded XML
+reports; the default response contains summaries and result paths. These actions
+require explicit packages/packageTrees and normal ADT access; they are single-target only.
 
 ```bash
 arc1 call SAPDiagnose --json '{"action":"atc_ci","packages":["ZFOO"]}' --output json

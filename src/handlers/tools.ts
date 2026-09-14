@@ -28,6 +28,7 @@ import { TEXT_ELEMENT_PARTS } from '../adt/text-elements.js';
 import type { ResolvedFeatures } from '../adt/types.js';
 import { MAX_GREP_PATTERN_LENGTH } from '../context/grep.js';
 import type { ServerConfig } from '../server/types.js';
+import { CI_QUALITY_INPUTS } from './ci-quality-schema.js';
 import * as DtelFields from './data-element-fields.js';
 import * as FuncProcessing from './function-processing.js';
 import { getHyperfocusedToolDefinition } from './hyperfocused.js';
@@ -1131,9 +1132,9 @@ export function getToolDefinitions(
         'Run diagnostics on ABAP objects and analyze runtime errors. Actions:\n' +
         '- "syntax": syntax-check (name+type; optional version; optional source = pre-write dry-run, nothing written).\n' +
         '- "unittest": harmless ABAP Unit for CLAS/PROG/FUGR or DEVC (exact; includeSubpackages recurses).\n' +
-        '- "unittest_ci": headless ABAP Unit (SAP_COM_0735) over packages/packageTrees/softwareComponents; tests + reportXml.\n' +
+        '- "unittest_ci": harmless package ABAP Unit with source reconciliation; empty/incomplete runs fail.\n' +
         '- "atc": run ATC checks (name+type or objects [{type,name}], max 20; omit variant to bind the system default; unknown variant = error). "atc_variants": list variants + that default (variant = name filter; read-only).\n' +
-        '- "atc_ci": headless ATC (SAP_COM_0901) over the same object set; findings + reportXml.\n' +
+        '- "atc_ci": package ATC CI API; requires available API and verified selection.\n' +
         '- "cds_testcases": SAP-suggested ABAP Unit test cases for a CDS entity (name; read-only; SAP_BASIS 8.16+).\n' +
         '- "object_state": compare active vs inactive source versions (name+type; CLAS compares all includes). Returns ETags/hashes/divergence flags.\n' +
         '- "quickfix": get quick-fix proposals at a position (name+type+source+line; optional column, sourceUri).\n' +
@@ -1262,10 +1263,6 @@ export function getToolDefinitions(
               },
             },
           },
-          variant: {
-            type: 'string',
-            description: 'atc/atc_ci: check variant; atc_variants: name filter (*=all)',
-          },
           id: {
             type: 'string',
             description:
@@ -1319,11 +1316,6 @@ export function getToolDefinitions(
             type: 'string',
             enum: ['legacy', 'structured', 'junit'],
             description: 'unittest: legacy|structured|junit; atc: legacy|structured; other actions reject it.',
-          },
-          timeoutSeconds: {
-            type: 'number',
-            description:
-              'unittest/atc timeout: 1-3600s; default 300. atc_ci/unittest_ci poll timeout: default 600, clamp 30-1800.',
           },
           sqlOn: {
             type: 'boolean',
@@ -1380,42 +1372,7 @@ export function getToolDefinitions(
             type: 'string',
             description: 'For trace_start: optional label for the trace request.',
           },
-          packages: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'atc_ci/unittest_ci: package names (AND with softwareComponents).',
-          },
-          packageTrees: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'atc_ci/unittest_ci: packages plus subpackages.',
-          },
-          softwareComponents: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'atc_ci/unittest_ci: software component names.',
-          },
-          configuration: { type: 'string', description: 'atc_ci: optional ATC configuration.' },
-          failOnSeverity: {
-            type: 'string',
-            enum: ['error', 'warning', 'info'],
-            description: 'atc_ci: fail at this severity or worse (default error).',
-          },
-          title: { type: 'string', description: 'unittest_ci: run title.' },
-          context: { type: 'string', description: 'unittest_ci: run context.' },
-          ownTests: { type: 'boolean', description: 'unittest_ci: include own tests (default true).' },
-          foreignTests: { type: 'boolean', description: 'unittest_ci: include foreign tests (default true).' },
-          harmless: { type: 'boolean', description: 'unittest_ci: include harmless tests (default true).' },
-          dangerous: { type: 'boolean', description: 'unittest_ci: include dangerous tests (default true).' },
-          critical: { type: 'boolean', description: 'unittest_ci: include critical tests (default true).' },
-          short: { type: 'boolean', description: 'unittest_ci: include short tests (default true).' },
-          medium: { type: 'boolean', description: 'unittest_ci: include medium tests (default true).' },
-          long: { type: 'boolean', description: 'unittest_ci: include long tests (default true).' },
-          measurements: { type: 'string', description: 'unittest_ci: measurement type (default none).' },
-          evaluateResults: {
-            type: 'boolean',
-            description: 'unittest_ci: fail on errors/failures (default true; skipped does not fail).',
-          },
+          ...CI_QUALITY_INPUTS,
         },
         required: ['action'],
       },

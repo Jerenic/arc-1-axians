@@ -125,8 +125,7 @@ const FULL_ACCESS_CONFIG: ServerConfig = {
 // failing build. Maintainer-approved 72,000 → 74,000 for combined #769 relations + #772 ATC
 // batches: 72,561 measured bytes, preserving evaluated guidance with 1,439 bytes of headroom.
 // Read-only, multi-target and per-tool ceilings are unchanged.
-// +atc_ci/unittest_ci object-set and AUnit option properties (LLM-visible, not duplicable into docs).
-const WRITE_WIRE_WALL = 76_000;
+const WRITE_WIRE_WALL = 74_000;
 const READ_WIRE_WALL = 50_000;
 const PER_TOOL_WIRE_WALL = 23_000;
 
@@ -179,11 +178,11 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
     resolvedFeatures: ALL_FEATURES_AVAILABLE,
     budget: {
       // Post-trim: read-only surface measured ~43.3 KB / ~10.8k schema tokens / 164 descriptions.
-      // Relations + ATC batches measure 11,849 tokens; the 50 KB wire ceiling is unchanged.
-      // +atc_ci/unittest_ci (+18 SAPDiagnose properties).
-      schemaTokenEstimate: 12_500,
-      descriptionTokenEstimate: 9_000,
-      descriptionCount: 200,
+      // Package CI adds five bounded controls; 12,131 tokens / 184 descriptions.
+      // Restores the original 50 KB read and 74 KB write wire ceilings.
+      schemaTokenEstimate: 12_200,
+      descriptionTokenEstimate: 8_800,
+      descriptionCount: 184,
       maxTotalWireBytes: READ_WIRE_WALL,
       maxPerToolWireBytes: PER_TOOL_WIRE_WALL,
     },
@@ -206,10 +205,9 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
       // Raised 17_700 -> 17_800 and descriptions 265 -> 270 for structured KTD shortTexts while
       // retaining refObjectDescription guidance. Wire ceilings remain unchanged.
       // Combined automatic relations + ATC batches; same budgets with explicit discovery below.
-      // +atc_ci/unittest_ci (+18 SAPDiagnose properties).
-      schemaTokenEstimate: 18_800,
-      descriptionTokenEstimate: 13_000,
-      descriptionCount: 292,
+      schemaTokenEstimate: 18_500,
+      descriptionTokenEstimate: 12_800,
+      descriptionCount: 276,
       maxTotalWireBytes: WRITE_WIRE_WALL,
       maxPerToolWireBytes: PER_TOOL_WIRE_WALL,
     },
@@ -224,10 +222,9 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
       // Raised 16_800 -> 16_900 and descriptions 260 -> 265 for structured KTD shortTexts while
       // retaining refObjectDescription guidance. Wire ceilings remain unchanged.
       // Combined relations + bounded ATC objects[]; retain a tighter BTP token ratchet.
-      // +atc_ci/unittest_ci (+18 SAPDiagnose properties).
-      schemaTokenEstimate: 17_900,
-      descriptionTokenEstimate: 12_450,
-      descriptionCount: 285,
+      schemaTokenEstimate: 17_600,
+      descriptionTokenEstimate: 12_200,
+      descriptionCount: 270,
       maxTotalWireBytes: WRITE_WIRE_WALL,
       maxPerToolWireBytes: PER_TOOL_WIRE_WALL,
     },
@@ -253,9 +250,9 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
     textSearchAvailable: true,
     resolvedFeatures: LIVE_RELATIONS_FEATURES,
     budget: {
-      schemaTokenEstimate: 12_500,
-      descriptionTokenEstimate: 9_000,
-      descriptionCount: 200,
+      schemaTokenEstimate: 12_200,
+      descriptionTokenEstimate: 8_800,
+      descriptionCount: 184,
       maxTotalWireBytes: READ_WIRE_WALL,
       maxPerToolWireBytes: PER_TOOL_WIRE_WALL,
     },
@@ -266,9 +263,9 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
     textSearchAvailable: true,
     resolvedFeatures: LIVE_RELATIONS_FEATURES,
     budget: {
-      schemaTokenEstimate: 18_800,
-      descriptionTokenEstimate: 13_000,
-      descriptionCount: 292,
+      schemaTokenEstimate: 18_500,
+      descriptionTokenEstimate: 12_800,
+      descriptionCount: 276,
       maxTotalWireBytes: WRITE_WIRE_WALL,
       maxPerToolWireBytes: PER_TOOL_WIRE_WALL,
     },
@@ -279,9 +276,9 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
     textSearchAvailable: true,
     resolvedFeatures: { ...LIVE_RELATIONS_FEATURES, systemType: 'btp' },
     budget: {
-      schemaTokenEstimate: 17_900,
-      descriptionTokenEstimate: 12_450,
-      descriptionCount: 285,
+      schemaTokenEstimate: 17_600,
+      descriptionTokenEstimate: 12_200,
+      descriptionCount: 270,
       maxTotalWireBytes: WRITE_WIRE_WALL,
       maxPerToolWireBytes: PER_TOOL_WIRE_WALL,
     },
