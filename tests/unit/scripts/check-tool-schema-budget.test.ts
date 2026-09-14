@@ -27,7 +27,8 @@ describe('check-tool-schema-budget', () => {
       expect(measureToolDefinitions(enabled).schemaBytes).toBe(measureToolDefinitions(base).schemaBytes);
       expect(enabled.budget.maxTotalWireBytes).toBe(base.budget.maxTotalWireBytes);
       expect(enabled.budget.maxPerToolWireBytes).toBe(base.budget.maxPerToolWireBytes);
-      expect(enabled.budget.maxTotalWireBytes).toBe(name === 'standard-default' ? 50_000 : 74_000);
+      // #779 adds the headless CI option schemas under an explicit 76 KB write ceiling.
+      expect(enabled.budget.maxTotalWireBytes).toBe(name === 'standard-default' ? 50_000 : 76_000);
       expect(enabled.budget.maxPerToolWireBytes).toBe(23_000);
       const diagnose = definitions.find((tool) => tool.name === 'SAPDiagnose')!;
       expect(diagnose.inputSchema).toHaveProperty('properties.objects.maxItems', 20);
