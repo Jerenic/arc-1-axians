@@ -110,7 +110,7 @@ describe('SAPDiagnose CI actions', () => {
 });
 
 describe('diagnoseCiQualityFailed', () => {
-  it('returns true only for CI actions whose payload has fail=true', () => {
+  it('uses completed quality outcomes only for CI actions', () => {
     const failing = textResult(toolJson({ fail: true, status: 'completed' }));
     const passing = textResult(toolJson({ fail: false, status: 'completed' }));
     expect(diagnoseCiQualityFailed({ action: 'atc_ci' }, failing)).toBe(true);

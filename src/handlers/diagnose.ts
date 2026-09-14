@@ -1268,18 +1268,20 @@ export async function handleSAPDiagnose(client: AdtClient, args: Record<string, 
   }
 }
 
-/** CLI exit helper: true when a CI quality action completed with `fail: true`. */
+/** Only an explicit completed, passing CI quality report may make the CLI green. */
 export function diagnoseCiQualityFailed(args: Record<string, unknown>, result: ToolResult): boolean {
   const action = String(args.action ?? '');
   if (action !== 'atc_ci' && action !== 'unittest_ci') return false;
   if (result.isError) return true;
   const text = result.content.find((block) => block.type === 'text')?.text;
-  if (!text) return false;
+  if (!text) return true;
   try {
     const parsed: unknown = JSON.parse(text);
-    return Boolean(parsed && typeof parsed === 'object' && (parsed as { fail?: unknown }).fail === true);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true;
+    const report = parsed as { status?: unknown; fail?: unknown };
+    return report.status !== 'completed' || report.fail !== false;
   } catch {
-    return false;
+    return true;
   }
 }
 

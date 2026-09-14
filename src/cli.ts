@@ -32,6 +32,7 @@ import {
   lintToCheckstyle,
   type StructuredDiffResult,
 } from './cli-checks.js';
+import { diagnoseCiQualityFailed } from './handlers/diagnose.js';
 import { getToolRegistry, handleToolCall } from './handlers/dispatch.js';
 import { setCachedDiscovery, setCachedFeatures } from './handlers/feature-cache.js';
 import { errorResult, type ToolResult } from './handlers/shared.js';
@@ -931,7 +932,9 @@ async function runToolCall(
     if (outcome.knownTools) console.error(`Known tools: ${outcome.knownTools.join(', ')}`);
     return 2;
   }
-  return renderToolResult(outcome.result, outputMode);
+  const exitCode = renderToolResult(outcome.result, outputMode);
+  if (toolName === 'SAPDiagnose' && diagnoseCiQualityFailed(args, outcome.result)) return 1;
+  return exitCode;
 }
 
 type CliProgramWithLifecycle = Command & {
