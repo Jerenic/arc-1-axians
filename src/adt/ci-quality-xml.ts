@@ -2,8 +2,7 @@
 import { XMLValidator } from 'fast-xml-parser';
 import { escapeXmlAttr, findDeepNodes, parseXml } from './xml-parser.js';
 
-export const CI_OBJECT_SET_LIST_CAP = 50;
-export const CI_OBJECT_SET_NAME_MAX = 40;
+export const CI_REPORT_PARSE_LIMIT = 2 * 1024 * 1024;
 export const DEFAULT_ATC_CI_VARIANT = 'ABAP_CLOUD_DEVELOPMENT_DEFAULT';
 export type AtcCiSeverity = 'error' | 'warning' | 'info';
 export interface CiObjectSet {
@@ -33,35 +32,8 @@ export interface CiRunStatusDocument {
   resultHref?: string;
 }
 
-export function normalizeCiObjectSet(input: CiObjectSet): NormalizedCiObjectSet {
-  const normalize = (names: string[] | undefined): string[] => {
-    if (names === undefined) return [];
-    if (!Array.isArray(names) || names.length > CI_OBJECT_SET_LIST_CAP)
-      throw new Error('CI package lists allow at most 50 entries.');
-    return [
-      ...new Set(
-        names.map((name) => {
-          if (typeof name !== 'string' || name.length > CI_OBJECT_SET_NAME_MAX || !/^[A-Za-z0-9_/$]+$/.test(name)) {
-            throw new Error('CI package names must contain 1..40 letters, digits, underscores, slashes or $.');
-          }
-          return name.toUpperCase();
-        }),
-      ),
-    ];
-  };
-  // Runtime defense for direct callers, even if they bypass the strict MCP schema.
-  if (Object.keys(input).some((key) => !['packages', 'packageTrees'].includes(key)))
-    throw new Error('CI selection supports packages and packageTrees only.');
-  const packages = normalize(input.packages);
-  const packageTrees = normalize(input.packageTrees);
-  if (packages.length + packageTrees.length === 0 || packages.length + packageTrees.length > CI_OBJECT_SET_LIST_CAP) {
-    throw new Error('CI selection requires 1..50 packages or package trees in total.');
-  }
-  return { packages: packages.filter((name) => !packageTrees.includes(name)), packageTrees };
-}
-
-export function buildOslObjectSetXml(input: CiObjectSet): string {
-  const objectSet = normalizeCiObjectSet(input);
+/** Input bounds are enforced by SAPDiagnose's strict schema before package verification. */
+export function buildOslObjectSetXml(objectSet: NormalizedCiObjectSet): string {
   return (
     '<osl:objectSet xsi:type="osl:packageSet" xmlns:osl="http://www.sap.com/api/osl" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
     objectSet.packages
@@ -75,23 +47,25 @@ export function buildOslObjectSetXml(input: CiObjectSet): string {
 }
 
 export function buildAtcCiRunParametersXml(
-  objectSet: CiObjectSet,
+  objectSet: NormalizedCiObjectSet,
   options: { variant?: string; configuration?: string } = {},
 ): string {
   const variant = options.variant?.trim() || DEFAULT_ATC_CI_VARIANT;
   return `<?xml version="1.0" encoding="UTF-8"?><atc:runparameters xmlns:atc="http://www.sap.com/adt/atc" checkVariant="${escapeXmlAttr(variant)}"${options.configuration ? ` configuration="${escapeXmlAttr(options.configuration)}"` : ''}>${buildOslObjectSetXml(objectSet)}</atc:runparameters>`;
 }
 
-function reportRoot(xml: string, name: string): Record<string, unknown> {
+export function reportRoot(xml: string, name: string, label = name): Record<string, unknown> {
+  if (Buffer.byteLength(xml) > CI_REPORT_PARSE_LIMIT)
+    throw new Error(`${label} report exceeded the 2 MiB parsing limit.`);
   if (XMLValidator.validate(xml) !== true || /<!DOCTYPE/i.test(xml))
-    throw new Error(`CI API returned invalid ${name} XML.`);
+    throw new Error(`CI API returned invalid ${label} XML.`);
   const parsed = parseXml(xml);
   const keys = Object.keys(parsed).filter((key) => !key.startsWith('?') && !key.startsWith('@_'));
-  if (keys.length !== 1 || keys[0] !== name) throw new Error(`CI API returned a non-${name} report.`);
+  if (keys.length !== 1 || keys[0] !== name) throw new Error(`CI API returned a non-${label} report.`);
   const root = parsed[name];
   if (root === '') return {};
   if (!root || typeof root !== 'object' || Array.isArray(root))
-    throw new Error(`CI API returned an invalid ${name} root.`);
+    throw new Error(`CI API returned an invalid ${label} root.`);
   return root as Record<string, unknown>;
 }
 

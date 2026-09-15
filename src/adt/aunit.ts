@@ -1,6 +1,6 @@
 /** ABAP Unit result semantics and the public async/JUnit API. */
 
-import { XMLValidator } from 'fast-xml-parser';
+import { reportRoot } from './ci-quality-xml.js';
 import { AdtApiError, AdtNetworkError } from './errors.js';
 import type { AdtHttpClient, AdtRequestOptions } from './http.js';
 import { sleepWithinRequestBudget } from './http-deadline.js';
@@ -997,22 +997,7 @@ function requiredCountAttr(node: Record<string, unknown>, name: string): number 
 }
 
 export function parseNativeJunitSummary(xml: string): NativeJunitSummary {
-  if (Buffer.byteLength(xml) > 2 * 1024 * 1024)
-    throw new Error('ABAP Unit JUnit report exceeded the 2 MiB parsing limit.');
-  if (XMLValidator.validate(xml) !== true || /<!DOCTYPE/i.test(xml))
-    throw new Error('ABAP Unit public API returned invalid JUnit XML.');
-  const parsed = parseXml(xml);
-  if (
-    Object.keys(parsed)
-      .filter((key) => !key.startsWith('?'))
-      .some((key) => key !== 'testsuites')
-  )
-    throw new Error('ABAP Unit public API returned a non-JUnit result.');
-  const root = parsed.testsuites;
-  if (!root || typeof root !== 'object' || Array.isArray(root)) {
-    throw new Error('ABAP Unit public API returned a non-JUnit result.');
-  }
-  const node = root as Record<string, unknown>;
+  const node = reportRoot(xml, 'testsuites', 'JUnit');
   const tests = requiredCountAttr(node, 'tests');
   const failures = requiredCountAttr(node, 'failures');
   const errors = requiredCountAttr(node, 'errors');

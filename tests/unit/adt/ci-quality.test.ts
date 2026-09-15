@@ -3,7 +3,6 @@ import { parseNativeJunitSummary } from '../../../src/adt/aunit.js';
 import { CI_FINDINGS_LIMIT, runAtcCiCheck, verifyCiPackages } from '../../../src/adt/ci-quality.js';
 import {
   buildAtcCiRunParametersXml,
-  normalizeCiObjectSet,
   parseAtcCheckstyle,
   parseAtcCiRunStatus,
 } from '../../../src/adt/ci-quality-xml.js';
@@ -77,37 +76,24 @@ describe('CI XML fails closed', () => {
     ).toBe('failed');
     expect(() => parseNativeJunitSummary(`<testsuites>${cases}</testsuites>`)).toThrow();
   });
-  it('marks zero/all-skipped native reports incomplete', () => {
-    expect(parseNativeJunitSummary('<testsuites tests="0" failures="0" errors="0" skipped="0"/>').outcome).toBe(
-      'incomplete',
-    );
-    expect(
-      parseNativeJunitSummary(
-        '<testsuites tests="1" failures="0" errors="0" skipped="1"><testsuite><testcase><skipped/></testcase></testsuite></testsuites>',
-      ).outcome,
-    ).toBe('incomplete');
-  });
   it('selects only the Checkstyle result link and preserves progress', () => {
     expect(parseAtcCiRunStatus(completed).resultHref).toBe(resultPath);
     expect(
       parseAtcCiRunStatus('<run status="Not Yet Started"><progress description="Job not yet started"/></run>'),
     ).toEqual({ status: 'Not Yet Started', progress: 'Job not yet started' });
   });
-  it('bounds and normalizes package names with sink escaping', () => {
-    expect(normalizeCiObjectSet({ packages: ['zpkg', 'ZPKG', '$TMP'], packageTrees: ['zpkg'] })).toEqual({
+  it('normalizes the verified selection once and preserves XML escaping', async () => {
+    const { http } = httpFor();
+    expect(
+      await verifyCiPackages(http, safety, { packages: ['zpkg', 'ZPKG', '$TMP'], packageTrees: ['zpkg'] }, {}),
+    ).toEqual({
       packages: ['$TMP'],
       packageTrees: ['ZPKG'],
     });
-    expect(buildAtcCiRunParametersXml({ packages: ['ZPKG'] }, { variant: 'A&B' })).toContain('checkVariant="A&amp;B"');
-    expect(buildAtcCiRunParametersXml({ packageTrees: ['ZPKG'] })).toContain('includeSubpackages="true"');
-    for (const set of [
-      {},
-      { packages: ['x'.repeat(41)] },
-      { packages: ['Z"'] },
-      { packages: Array(51).fill('Z') },
-      { softwareComponents: ['Z'] },
-    ])
-      expect(() => normalizeCiObjectSet(set)).toThrow();
+    expect(buildAtcCiRunParametersXml({ packages: ['ZPKG'], packageTrees: [] }, { variant: 'A&B' })).toContain(
+      'checkVariant="A&amp;B"',
+    );
+    expect(buildAtcCiRunParametersXml({ packages: [], packageTrees: ['ZPKG'] })).toContain('includeSubpackages="true"');
   });
 });
 

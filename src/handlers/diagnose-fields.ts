@@ -9,6 +9,7 @@ export const CI_PACKAGES_SCHEMA = z
       .regex(/^[A-Za-z0-9_/$]+$/),
   )
   .max(50);
+const packageItem = { type: 'string', minLength: 1, maxLength: 40, pattern: '^[A-Za-z0-9_/$]+$' };
 export const SAPDIAGNOSE_ADDITIONAL_INPUTS = {
   variant: {
     type: 'string',
@@ -23,13 +24,13 @@ export const SAPDIAGNOSE_ADDITIONAL_INPUTS = {
   packages: {
     type: 'array',
     maxItems: 50,
-    items: { type: 'string', minLength: 1, maxLength: 40, pattern: '^[A-Za-z0-9_/$]+$' },
+    items: packageItem,
     description: 'CI exact packages; 1–50 total with packageTrees.',
   },
   packageTrees: {
     type: 'array',
     maxItems: 50,
-    items: { type: 'string', minLength: 1, maxLength: 40, pattern: '^[A-Za-z0-9_/$]+$' },
+    items: packageItem,
     description: 'CI packages including subpackages.',
   },
   configuration: {

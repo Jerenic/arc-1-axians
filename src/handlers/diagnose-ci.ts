@@ -57,13 +57,11 @@ export async function handleCiQuality(
   let reportBytes = 0;
   let stoppedReason: string | undefined;
   for (const target of targets) {
-    if (stoppedReason) {
-      results.push({ ...target, outcome: 'incomplete', attempted: false, incompleteReason: stoppedReason });
-      continue;
-    }
-    if (signal?.aborted || Date.now() >= deadline) {
+    if (!stoppedReason && (signal?.aborted || Date.now() >= deadline)) {
       incomplete = fail = true;
       stoppedReason = signal?.aborted ? 'cancelled' : 'timeout';
+    }
+    if (stoppedReason) {
       results.push({ ...target, outcome: 'incomplete', attempted: false, incompleteReason: stoppedReason });
       continue;
     }

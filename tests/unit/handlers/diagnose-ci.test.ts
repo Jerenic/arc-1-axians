@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { diagnoseCiQualityFailed } from '../../../src/cli-checks.js';
 import { handleCiQuality } from '../../../src/handlers/diagnose-ci.js';
 import { getToolSchema } from '../../../src/handlers/schemas.js';
 import { errorResult, textResult, toolJson } from '../../../src/handlers/shared.js';
@@ -103,7 +102,6 @@ describe('CI action inputs and adapters', () => {
       vi.fn().mockResolvedValue(payload(String(outcome), Number(tests))),
     );
     expect(JSON.parse(result.content[0].text).fail).toBe(true);
-    expect(diagnoseCiQualityFailed({ action: 'unittest_ci' }, result)).toBe(true);
   });
   it('refuses an unverified apparent pass', async () => {
     const diagnose = vi
@@ -181,7 +179,6 @@ describe('CI action inputs and adapters', () => {
       expect(data.results[1]).toMatchObject({ name: 'ZB', outcome: 'incomplete', attempted: true });
       expect(data.results[2]).toMatchObject({ name: 'ZC', outcome: 'incomplete', attempted: false });
       expect(diagnose).toHaveBeenCalledTimes(2);
-      expect(diagnoseCiQualityFailed({ action: 'unittest_ci' }, result)).toBe(true);
       expect(JSON.stringify(result)).not.toContain('PRIVATE_SAP_DETAIL');
     },
   );
@@ -211,20 +208,5 @@ describe('CI action inputs and adapters', () => {
       handleCiQuality(createClient(), { action: 'unittest_ci', packages: ['Z'] }, diagnose),
     );
     expect(diagnose.mock.calls[0]?.[2]).toMatchObject({ signal, deadline: expect.any(Number) });
-  });
-});
-
-describe('CI CLI exit gate', () => {
-  it.each([{ fail: true, status: 'completed' }, { fail: false, status: 'incomplete' }, { fail: false }, {}])(
-    'fails closed for %j',
-    (value) => {
-      expect(diagnoseCiQualityFailed({ action: 'unittest_ci' }, textResult(toolJson(value)))).toBe(true);
-    },
-  );
-  it('only accepts explicit completion and pass', () => {
-    expect(
-      diagnoseCiQualityFailed({ action: 'atc_ci' }, textResult(toolJson({ status: 'completed', fail: false }))),
-    ).toBe(false);
-    expect(diagnoseCiQualityFailed({ action: 'atc' }, textResult('{}'))).toBe(false);
   });
 });

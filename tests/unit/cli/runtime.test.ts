@@ -57,36 +57,12 @@ afterEach(() => {
 });
 
 describe('CLI runtime', () => {
-  it.each(['atc_ci', 'unittest_ci'])(
-    'uses %s quality results in the real CLI route and retains reports',
-    async (action) => {
-      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      for (const output of ['text', 'json']) {
-        for (const fail of [false, true]) {
-          log.mockClear();
-          error.mockClear();
-          const report = { status: 'completed', fail, reportXml: '<testsuites name="retained"/>' };
-          const result = successfulToolResult(JSON.stringify(report));
-          const dispatchToolCall = vi.fn(async () => result);
-          const code = await main(
-            ['call', 'SAPDiagnose', '--json', JSON.stringify({ action, packages: ['ZTEST'] }), '--output', output],
-            directDependencies(resolved({ url: 'https://sap.example.test' }), { dispatchToolCall }),
-          );
-          expect(code).toBe(fail ? 1 : 0);
-          expect(dispatchToolCall).toHaveBeenCalledOnce();
-          const printed = log.mock.calls.map((call) => call[0]).join('\n');
-          expect(JSON.parse(printed)).toEqual(output === 'json' ? result : report);
-          expect(error).not.toHaveBeenCalled();
-        }
-      }
-    },
-  );
-
-  it.each(['atc_ci', 'unittest_ci'])('fails closed on invalid %s results through the CLI', async (action) => {
-    vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    for (const text of [
+  it.each([
+    ['atc_ci', 'text', '{"status":"completed","fail":false}', 0],
+    ['atc_ci', 'json', '{"status":"completed","fail":true}', 1],
+    ['unittest_ci', 'json', '{"status":"completed","fail":false,"reportXml":"<testsuites/>"}', 0],
+    ['unittest_ci', 'text', '{"status":"completed","fail":true}', 1],
+    ...[
       'not JSON',
       '{}',
       'null',
@@ -94,16 +70,26 @@ describe('CLI runtime', () => {
       '{"status":"running","fail":false}',
       '{"status":"incomplete","fail":false,"summary":{"tests":0}}',
       '{"status":"completed","fail":"false"}',
-    ]) {
+    ].map((text) => ['atc_ci', 'text', text, 1] as const),
+  ] as const)(
+    'routes %s output=%s report=%s to exit %s without changing the report',
+    async (action, output, text, expected) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const result = successfulToolResult(text);
+      const dispatchToolCall = vi.fn(async () => result);
       const code = await main(
-        ['call', 'SAPDiagnose', '--json', JSON.stringify({ action })],
-        directDependencies(resolved({ url: 'https://sap.example.test' }), {
-          dispatchToolCall: vi.fn(async () => successfulToolResult(text)),
-        }),
+        ['call', 'SAPDiagnose', '--json', JSON.stringify({ action, packages: ['ZTEST'] }), '--output', output],
+        directDependencies(resolved({ url: 'https://sap.example.test' }), { dispatchToolCall }),
       );
-      expect(code, text).toBe(1);
-    }
-  });
+      expect(code).toBe(expected);
+      expect(dispatchToolCall).toHaveBeenCalledOnce();
+      const printed = log.mock.calls.map((call) => call[0]).join('\n');
+      if (output === 'json') expect(JSON.parse(printed)).toEqual(result);
+      else expect(printed).toBe(text);
+      expect(error).not.toHaveBeenCalled();
+    },
+  );
 
   it('keeps non-CI results independent of a field named fail', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);

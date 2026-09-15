@@ -479,12 +479,9 @@ export function diagnoseCiQualityFailed(args: Record<string, unknown>, result: T
   if (action !== 'atc_ci' && action !== 'unittest_ci') return false;
   if (result.isError) return true;
   const text = result.content.find((block) => block.type === 'text')?.text;
-  if (!text) return true;
   try {
-    const parsed: unknown = JSON.parse(text);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true;
-    const report = parsed as { status?: unknown; fail?: unknown };
-    return report.status !== 'completed' || report.fail !== false;
+    const report = JSON.parse(text ?? '') as { status?: unknown; fail?: unknown } | null;
+    return report?.status !== 'completed' || report?.fail !== false;
   } catch {
     return true;
   }

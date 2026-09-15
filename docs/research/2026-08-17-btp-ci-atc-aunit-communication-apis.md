@@ -1,10 +1,5 @@
 # ATC and ABAP Unit CI API integration
 
-Revised 14 September 2026 following review of PR #779. This document describes the
-current implementation. The original dossier claimed BTP live completion without
-recording a release, timings, or scrubbed wire evidence; that claim is withdrawn.
-The earlier duplicate AUnit client and dangerous-by-default options are removed.
-
 ## Sources and evidence limits
 
 - [Piper ATC step](https://www.project-piper.io/steps/abapEnvironmentRunATCCheck/)
@@ -87,15 +82,6 @@ capped at 2 MiB; exceeding it is not a quality pass.
 `fail:false`; failure, incomplete, malformed results and tool errors exit nonzero.
 MCP callers must inspect the domain outcome, not only the absence of `isError`.
 
-## Review implementation and verification
-
-See [the reviewed correction plan](../plans/2026-09-14-pr779-review-hardening.md).
-The regression matrix covers invalid report roots, nested/missing/contradictory
-JUnit counts, zero/all-skipped results, every package preflight before POST,
-harmless XML, unsafe run/result links, shared deadlines and cancellation,
-terminal states, missing API guidance, bounded reports, action input rules and CLI exits.
-Live results and final gate counts are recorded below after verification.
-
 ### Live acceptance, 14 September 2026
 
 Read-scoped calls under the configured developer identity; no repository objects
@@ -115,22 +101,13 @@ establish successful ATC background execution. No BTP communication arrangement
 was available for this verification. Package/tree CI scope is retained; whole
 software-component selection and special communication-user bootstrap are deferred.
 
-### Final review
+The reviewer additionally verified structure-only exact/tree selections on 7.58:
+no ATC run POSTs were sent. Disposable passing/failing harmless tests produced CLI
+exit 0/1, respectively; all fixtures were removed. AUnit preserves earlier package
+results after a later failure and marks subsequent packages unattempted.
 
-Restored the 74,000-byte full wire ceiling and 1,795-line tools.ts budget.
-The reduced new surface measures 48,524 read-only / 73,651 full wire bytes, with
-12,131 / 18,413 estimated tokens. Only the smaller token/count ratchets needed for
-five bounded controls remain above main; the prior 17-property expansion is gone.
-Multi-target removes the CI actions and their exclusive inputs.
-
-Full tests, typecheck, build, lint, action-policy and size/schema gates were run.
-The strict JUnit change exposed three old synthetic fixtures claiming nonzero tests
-without any testcase elements; those fixtures now contain matching cases. No test
-was disabled. The seven changed tool snapshots were regenerated and reviewed for
-the intended action/input and guidance changes.
-
-Final count: **6,668 tests in 215 files passed** after `npm ci` using this fork's
-lockfile, with `npm test -- --maxWorkers=4`; all other repository gates passed.
-The default parallel run twice hit an unrelated HTTP metadata test (HTTP parse /
-timeout); that file passed in isolation, and the complete four-worker run passed.
-No production HTTP code or test timeout was changed to conceal that instability.
+Native XML export remains opt-in and bounded. Existing CLI JUnit export is useful
+for a single package, but does not replace this multi-package result or ATC's native
+Checkstyle output. The strict MCP schemas own selection and timeout input bounds;
+normalization runs once during package verification. XML escaping and canonical
+returned-path validation remain at their sinks.

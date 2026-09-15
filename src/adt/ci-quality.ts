@@ -1,12 +1,14 @@
 /** Package-based ATC CI client. AUnit CI reuses the existing reconciled handler. */
 import { setTimeout as sleep } from 'node:timers/promises';
+import { ATC_RUN_STATUS_MEDIA_TYPE, isAtcRunFailure } from './atc.js';
 import {
   type AtcCiSeverity,
   atcFindingsFail,
   buildAtcCiRunParametersXml,
+  CI_REPORT_PARSE_LIMIT,
   type CiObjectSet,
   type CiRunStatusDocument,
-  normalizeCiObjectSet,
+  type NormalizedCiObjectSet,
   parseAtcCheckstyle,
   parseAtcCiRunStatus,
 } from './ci-quality-xml.js';
@@ -17,13 +19,10 @@ import { checkOperation, OperationType, type SafetyConfig } from './safety.js';
 import { findDeepNodes, parseSearchResults, parseXml } from './xml-parser.js';
 
 export const ATC_CI_RUNS_PATH = '/sap/bc/adt/api/atc/runs';
-export const ATC_CI_ACCEPT_RUN = 'application/vnd.sap.atc.run.v1+xml';
 export const ATC_CI_CONTENT_TYPE_RUN = 'application/vnd.sap.atc.run.parameters.v1+xml; charset=utf-8';
 export const ATC_CI_ACCEPT_CHECKSTYLE = 'application/vnd.sap.atc.checkstyle.v1+xml';
 export const CI_REPORT_XML_LIMIT = 256 * 1024;
-export const CI_REPORT_PARSE_LIMIT = 2 * 1024 * 1024;
 export const CI_FINDINGS_LIMIT = 200;
-export const CI_POLL_TIMEOUT_DEFAULT_SECONDS = 600;
 
 export interface CiQualityClock {
   now(): number;
@@ -34,7 +33,7 @@ export interface RunAtcCiOptions {
   variant?: string;
   configuration?: string;
   failOnSeverity?: AtcCiSeverity;
-  timeoutSeconds?: number;
+  timeoutSeconds: number;
   signal?: AbortSignal;
   clock?: CiQualityClock;
   includeReportXml?: boolean;
@@ -47,9 +46,14 @@ export async function verifyCiPackages(
   input: CiObjectSet,
   requestOptions: AdtRequestOptions,
   requireObjects = false,
-): Promise<ReturnType<typeof normalizeCiObjectSet>> {
+): Promise<NormalizedCiObjectSet> {
   checkOperation(safety, OperationType.Read, 'VerifyCiPackages');
-  const objectSet = normalizeCiObjectSet(input);
+  const normalize = (names: string[] = []) => [...new Set(names.map((name) => name.toUpperCase()))];
+  const packageTrees = normalize(input.packageTrees);
+  const objectSet = {
+    packages: normalize(input.packages).filter((name) => !packageTrees.includes(name)),
+    packageTrees,
+  };
   for (const name of [...objectSet.packages, ...objectSet.packageTrees]) {
     let response: AdtResponse;
     try {
@@ -89,7 +93,7 @@ export async function probeAtcCi(
   try {
     await http.get(
       `${ATC_CI_RUNS_PATH}/00000000000000000000000000000000`,
-      { Accept: ATC_CI_ACCEPT_RUN },
+      { Accept: ATC_RUN_STATUS_MEDIA_TYPE },
       { ...requestOptions, probe: true },
     );
     return true;
@@ -101,15 +105,12 @@ export async function probeAtcCi(
 
 export async function runAtcCiCheck(http: AdtHttpClient, safety: SafetyConfig, options: RunAtcCiOptions) {
   checkOperation(safety, OperationType.Read, 'RunAtcCiCheck');
-  const timeout = options.timeoutSeconds ?? CI_POLL_TIMEOUT_DEFAULT_SECONDS;
-  if (!Number.isInteger(timeout) || timeout < 1 || timeout > 3600)
-    throw new Error('CI timeoutSeconds must be an integer from 1 to 3600.');
   const clock = options.clock ?? {
     now: Date.now,
     sleep: (ms: number, signal?: AbortSignal) => sleep(ms, undefined, { signal }),
   };
   const started = clock.now();
-  const deadline = started + timeout * 1000;
+  const deadline = started + options.timeoutSeconds * 1000;
   const requestOptions = { deadline, signal: options.signal };
   let runPath: string | undefined;
   let state: CiRunStatusDocument = { status: 'not started' };
@@ -131,7 +132,7 @@ export async function runAtcCiCheck(http: AdtHttpClient, safety: SafetyConfig, o
       `${ATC_CI_RUNS_PATH}?clientWait=false`,
       buildAtcCiRunParametersXml(objectSet, options),
       ATC_CI_CONTENT_TYPE_RUN,
-      { Accept: ATC_CI_ACCEPT_RUN },
+      { Accept: ATC_RUN_STATUS_MEDIA_TYPE },
       requestOptions,
     );
     runPath = assertCanonicalHostRelativeAdtPath(
@@ -140,7 +141,7 @@ export async function runAtcCiCheck(http: AdtHttpClient, safety: SafetyConfig, o
     );
     while (clock.now() < deadline) {
       options.signal?.throwIfAborted();
-      const response = await http.get(runPath, { Accept: ATC_CI_ACCEPT_RUN }, requestOptions);
+      const response = await http.get(runPath, { Accept: ATC_RUN_STATUS_MEDIA_TYPE }, requestOptions);
       state = parseAtcCiRunStatus(response.body);
       if (/^completed$/i.test(state.status)) {
         if (!state.resultHref) return incomplete('Completed run has no unambiguous Checkstyle result link.');
@@ -166,8 +167,7 @@ export async function runAtcCiCheck(http: AdtHttpClient, safety: SafetyConfig, o
             : {}),
         };
       }
-      if (!state.status || /^(not created|failed|error|aborted|cancelled|canceled)$/i.test(state.status))
-        return incomplete('SAP did not complete the ATC CI run.');
+      if (!state.status || isAtcRunFailure(state.status)) return incomplete('SAP did not complete the ATC CI run.');
       const remaining = deadline - clock.now();
       if (remaining <= 0) break;
       await clock.sleep(Math.min(5000, remaining), options.signal);

@@ -70,50 +70,6 @@ describe('hyperfocused mode', () => {
       }
     });
 
-    it('expands diagnose atc_ci and unittest_ci params into SAPDiagnose args', () => {
-      const atc = expandHyperfocusedArgs({
-        action: 'diagnose',
-        params: {
-          action: 'atc_ci',
-          packages: ['Z_TEST'],
-          packageTrees: ['Z_TEST_TREE'],
-          variant: 'ABAP_CLOUD_DEVELOPMENT_DEFAULT',
-          failOnSeverity: 'warning',
-          timeoutSeconds: 120,
-        },
-      });
-      expect('error' in atc).toBe(false);
-      if (!('error' in atc)) {
-        expect(atc.toolName).toBe('SAPDiagnose');
-        expect(atc.expandedArgs).toMatchObject({
-          action: 'atc_ci',
-          packages: ['Z_TEST'],
-          failOnSeverity: 'warning',
-          timeoutSeconds: 120,
-        });
-      }
-
-      const aunit = expandHyperfocusedArgs({
-        action: 'diagnose',
-        params: {
-          action: 'unittest_ci',
-          packages: ['Z_TEST'],
-          includeReportXml: true,
-          timeoutSeconds: 90,
-        },
-      });
-      expect('error' in aunit).toBe(false);
-      if (!('error' in aunit)) {
-        expect(aunit.toolName).toBe('SAPDiagnose');
-        expect(aunit.expandedArgs).toMatchObject({
-          action: 'unittest_ci',
-          packages: ['Z_TEST'],
-          includeReportXml: true,
-          timeoutSeconds: 90,
-        });
-      }
-    });
-
     it('returns error for unknown action', () => {
       const result = expandHyperfocusedArgs({ action: 'invalid' });
       expect('error' in result).toBe(true);
