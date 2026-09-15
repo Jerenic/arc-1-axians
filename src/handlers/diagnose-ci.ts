@@ -55,54 +55,80 @@ export async function handleCiQuality(
   let incomplete = false;
   let fail = false;
   let reportBytes = 0;
+  let stoppedReason: string | undefined;
   for (const target of targets) {
+    if (stoppedReason) {
+      results.push({ ...target, outcome: 'incomplete', attempted: false, incompleteReason: stoppedReason });
+      continue;
+    }
     if (signal?.aborted || Date.now() >= deadline) {
       incomplete = fail = true;
-      results.push({ ...target, outcome: 'incomplete', incompleteReason: signal?.aborted ? 'cancelled' : 'timeout' });
-      break;
+      stoppedReason = signal?.aborted ? 'cancelled' : 'timeout';
+      results.push({ ...target, outcome: 'incomplete', attempted: false, incompleteReason: stoppedReason });
+      continue;
     }
-    const result = await diagnose(
-      client,
-      { action: 'unittest', type: 'DEVC', ...target, resultFormat: 'junit', timeoutSeconds },
-      requestOptions,
-    );
-    if (result.isError) return result;
-    const payload = JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
-    const counts = payload.summary as Record<string, unknown> | undefined;
-    if (!counts || !Object.keys(summary).every((key) => Number.isSafeInteger(counts[key]) && Number(counts[key]) >= 0))
-      throw new Error('ABAP Unit CI returned invalid result counters.');
-    for (const key of Object.keys(summary) as (keyof typeof summary)[]) summary[key] += Number(counts[key]);
-    const outcome = payload.outcome === 'no_tests' ? 'incomplete' : String(payload.outcome);
-    if (!['passed', 'failed', 'incomplete'].includes(outcome))
-      throw new Error('ABAP Unit CI returned an unknown outcome.');
-    const source = payload.sourceSelectionEvidence as Record<string, unknown> | undefined;
-    const omitted = Array.isArray(source?.omittedTestClasses) ? source.omittedTestClasses.length : undefined;
-    const passing =
-      outcome === 'passed' &&
-      Number(counts.tests) > Number(counts.skipped) &&
-      counts.failures === 0 &&
-      counts.errors === 0 &&
-      source?.status === 'verified' &&
-      omitted === 0;
-    fail ||= !passing;
-    incomplete ||= outcome === 'incomplete' || (outcome === 'passed' && !passing);
-    const row: Record<string, unknown> = {
-      ...target,
-      outcome: outcome === 'passed' && !passing ? 'incomplete' : outcome,
-      summary: counts,
-      ...(payload.incompleteReason ? { incompleteReason: payload.incompleteReason } : {}),
-      sourceSelection: { status: source?.status ?? 'unavailable', omittedTestClasses: omitted },
-      runPath: payload.runPath,
-      resultPath: payload.resultPath,
-    };
-    if (args.includeReportXml === true && typeof payload.junit === 'string') {
-      const bytes = Buffer.byteLength(payload.junit);
-      if (reportBytes + bytes <= CI_REPORT_XML_LIMIT) {
-        row.reportXml = payload.junit;
-        reportBytes += bytes;
-      } else row.reportXmlOmitted = 'Combined reports exceed 256 KiB.';
+    try {
+      const result = await diagnose(
+        client,
+        { action: 'unittest', type: 'DEVC', ...target, resultFormat: 'junit', timeoutSeconds },
+        requestOptions,
+      );
+      if (result.isError) throw new Error('Package ABAP Unit returned a tool error.');
+      const payload = JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
+      const counts = payload.summary as Record<string, unknown> | undefined;
+      if (
+        !counts ||
+        !Object.keys(summary).every((key) => Number.isSafeInteger(counts[key]) && Number(counts[key]) >= 0)
+      )
+        throw new Error('ABAP Unit CI returned invalid result counters.');
+      const outcome = payload.outcome === 'no_tests' ? 'incomplete' : String(payload.outcome);
+      if (!['passed', 'failed', 'incomplete'].includes(outcome))
+        throw new Error('ABAP Unit CI returned an unknown outcome.');
+      for (const key of Object.keys(summary) as (keyof typeof summary)[]) summary[key] += Number(counts[key]);
+      const source = payload.sourceSelectionEvidence as Record<string, unknown> | undefined;
+      const omitted = Array.isArray(source?.omittedTestClasses) ? source.omittedTestClasses.length : undefined;
+      const passing =
+        outcome === 'passed' &&
+        Number(counts.tests) > Number(counts.skipped) &&
+        counts.failures === 0 &&
+        counts.errors === 0 &&
+        source?.status === 'verified' &&
+        omitted === 0;
+      fail ||= !passing;
+      incomplete ||= outcome === 'incomplete' || (outcome === 'passed' && !passing);
+      const row: Record<string, unknown> = {
+        ...target,
+        outcome: outcome === 'passed' && !passing ? 'incomplete' : outcome,
+        summary: counts,
+        ...(payload.incompleteReason ? { incompleteReason: payload.incompleteReason } : {}),
+        sourceSelection: { status: source?.status ?? 'unavailable', omittedTestClasses: omitted },
+        runPath: payload.runPath,
+        resultPath: payload.resultPath,
+      };
+      if (args.includeReportXml === true && typeof payload.junit === 'string') {
+        const bytes = Buffer.byteLength(payload.junit);
+        if (reportBytes + bytes <= CI_REPORT_XML_LIMIT) {
+          row.reportXml = payload.junit;
+          reportBytes += bytes;
+        } else row.reportXmlOmitted = 'Combined reports exceed 256 KiB.';
+      }
+      results.push(row);
+    } catch {
+      // Retain earlier evidence; stop after any tool/protocol failure, including authorization errors.
+      // Do not embed raw nested SAP errors (which could bypass minimal-errors redaction).
+      incomplete = fail = true;
+      results.push({
+        ...target,
+        outcome: 'incomplete',
+        attempted: true,
+        incompleteReason: signal?.aborted
+          ? 'cancelled'
+          : Date.now() >= deadline
+            ? 'timeout'
+            : 'Package execution or result validation failed. Inspect SAP diagnostics before retrying.',
+      });
+      stoppedReason = 'Not attempted after a preceding package failure.';
     }
-    results.push(row);
   }
   return textResult(
     toolJson({

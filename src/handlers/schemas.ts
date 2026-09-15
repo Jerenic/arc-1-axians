@@ -24,7 +24,7 @@ import { DTEL_MAX_LABEL_LENGTHS } from '../adt/ddic-xml.js';
 import { canonicalRevisionSourcePath, isCanonicalHostRelativeAdtPath } from '../adt/path-safety.js';
 import { TEXT_ELEMENT_PARTS as SAPREAD_TEXT_ELEMENT_INCLUDES } from '../adt/text-elements.js';
 import { MAX_GREP_PATTERN_LENGTH } from '../context/grep.js';
-import { CI_PACKAGES_SCHEMA } from './ci-quality-schema.js';
+import { CI_PACKAGES_SCHEMA } from './diagnose-fields.js';
 import { FUNCTION_PROCESSING_TYPES, FUNCTION_UPDATE_TASK_KINDS } from './function-processing.js';
 import { CLASS_WRITE_INCLUDES } from './object-types.js';
 import { LiveRelationsInput, relationNumber } from './relation-input.js';

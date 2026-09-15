@@ -69,7 +69,9 @@ export async function verifyCiPackages(
         requestOptions,
       );
       const objects = parseSearchResults(result.body).filter(
-        (object) => objectSet.packageTrees.includes(name) || object.packageName.toUpperCase() === name,
+        (object) =>
+          !/^DEVC(?:\/|$)/i.test(object.objectType) &&
+          (objectSet.packageTrees.includes(name) || object.packageName.toUpperCase() === name),
       );
       if (!objects.length)
         throw new Error(`CI package selection ${name} is empty or could not be verified. No run was started.`);

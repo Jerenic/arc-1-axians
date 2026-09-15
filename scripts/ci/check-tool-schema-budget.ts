@@ -178,9 +178,9 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
     resolvedFeatures: ALL_FEATURES_AVAILABLE,
     budget: {
       // Post-trim: read-only surface measured ~43.3 KB / ~10.8k schema tokens / 164 descriptions.
-      // Package CI adds five bounded controls; 12,131 tokens / 184 descriptions.
-      // Restores the original 50 KB read and 74 KB write wire ceilings.
-      schemaTokenEstimate: 12_200,
+      // Package CI adds five bounded controls; description trims retain pre-CI token ratchets.
+      // The 50 KB read and 74 KB write wire ceilings are unchanged.
+      schemaTokenEstimate: 12_000,
       descriptionTokenEstimate: 8_800,
       descriptionCount: 184,
       maxTotalWireBytes: READ_WIRE_WALL,
@@ -222,7 +222,7 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
       // Raised 16_800 -> 16_900 and descriptions 260 -> 265 for structured KTD shortTexts while
       // retaining refObjectDescription guidance. Wire ceilings remain unchanged.
       // Combined relations + bounded ATC objects[]; retain a tighter BTP token ratchet.
-      schemaTokenEstimate: 17_600,
+      schemaTokenEstimate: 17_350,
       descriptionTokenEstimate: 12_200,
       descriptionCount: 270,
       maxTotalWireBytes: WRITE_WIRE_WALL,
@@ -250,7 +250,7 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
     textSearchAvailable: true,
     resolvedFeatures: LIVE_RELATIONS_FEATURES,
     budget: {
-      schemaTokenEstimate: 12_200,
+      schemaTokenEstimate: 12_000,
       descriptionTokenEstimate: 8_800,
       descriptionCount: 184,
       maxTotalWireBytes: READ_WIRE_WALL,
@@ -276,7 +276,7 @@ export const TOOL_SCHEMA_SCENARIOS: ToolSchemaScenario[] = [
     textSearchAvailable: true,
     resolvedFeatures: { ...LIVE_RELATIONS_FEATURES, systemType: 'btp' },
     budget: {
-      schemaTokenEstimate: 17_600,
+      schemaTokenEstimate: 17_350,
       descriptionTokenEstimate: 12_200,
       descriptionCount: 270,
       maxTotalWireBytes: WRITE_WIRE_WALL,

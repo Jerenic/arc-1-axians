@@ -64,3 +64,34 @@ OSL software-component set; the AUnit adapter reuses the complete existing handl
 because the public client alone does not detect omitted source-declared tests.
 All action mutation/scope gates remain unchanged; multi-target access narrows.
 No HTTP-status-shaped errors are used for local validation, cancellation or timeouts.
+
+## Review round 2 (2026-09-15)
+
+Reproduced the reported integration failure by locally combining the five original
+reviewed heads: tools.ts 1,796/1,795 lines; standard description tokens 8,803/8,800;
+BTP schema tokens 17,646/17,600; BTP description tokens 12,257/12,200;
+full wire size 73,963/74,000 bytes. No GitHub PR was merged or rebased.
+
+Plan and review decisions:
+- Exclude DEVC and DEVC/* rows as evidence of a checkable object, including tree
+  selections. A real descendant can establish nonemptiness for packageTrees, while
+  exact packages still require an object directly in that package. This remains
+  conservative when quick search cannot prove a nonempty selection.
+- Preserve earlier package results after a later tool error, exception, invalid
+  response or cancellation. Record failed/unattempted targets, stop further runs,
+  return incomplete/fail true and retain exit 1. Do not copy raw nested errors into
+  JSON and bypass minimal-error redaction.
+- Rename the shared definition module to diagnose-fields.ts to reflect ownership
+  of variant/timeout as well as CI fields. Trim repeated SAPDiagnose guidance and
+  retain required inputs, defaults, risk restrictions, and exact quickfix values.
+  Restore the pre-CI schema token ratchets (12,000 read and 17,350 BTP); retain the
+  original wire ceilings and lower the tools.ts line budget to 1,782, including
+  #786's extra line.
+
+Verification: build, typecheck, lint, policy, file/schema budgets and all **6,678
+unit tests in 215 files** passed. Seven regenerated snapshots were structurally
+compared with the prior head: changes are descriptions only, with no new/removed
+fields, enums, types or constraints. Live passing/failing AUnit evidence from the
+external review remains applicable to the unchanged reconciled execution path;
+this round exercises the new fault handling and empty-selection gates with controlled
+responses. ATC completion on the affected system and BTP remain unverified.

@@ -150,6 +150,38 @@ describe('ATC CI orchestration', () => {
     await expect(runAtcCiCheck(http, safety, options())).rejects.toThrow('empty or could not be verified');
     expect(post).not.toHaveBeenCalled();
   });
+  it.each(['DEVC', 'DEVC/K', 'devc/k'])(
+    'rejects a selection containing only %s package rows before POST',
+    async (type) => {
+      const { http, get, post } = httpFor();
+      get.mockImplementation(async (path: string) => ({
+        body: path.includes('/packages/')
+          ? '<package name="ZPKG"/>'
+          : `<objectReferences><objectReference name="ZCHILD" type="${type}" packageName="ZPKG" uri="/sap/bc/adt/packages/ZCHILD"/></objectReferences>`,
+        headers: {},
+      }));
+      for (const objectSet of [{ packages: ['ZPKG'] }, { packageTrees: ['ZPKG'] }]) {
+        await expect(runAtcCiCheck(http, safety, { ...options(), objectSet })).rejects.toThrow(
+          'empty or could not be verified',
+        );
+        expect(post).not.toHaveBeenCalled();
+      }
+    },
+  );
+  it('requires an actual object in the exact package but permits a tree descendant', async () => {
+    const { http, get, post } = httpFor();
+    get.mockImplementation(async (path: string) => ({
+      body: path.includes('/packages/')
+        ? '<package name="ZPKG"/>'
+        : '<objectReferences><objectReference name="ZCHILD" type="DEVC/K" packageName="ZPKG"/><objectReference name="ZPROGRAM" type="PROG/P" packageName="ZCHILD"/></objectReferences>',
+      headers: {},
+    }));
+    await expect(verifyCiPackages(http, safety, { packages: ['ZPKG'] }, {}, true)).rejects.toThrow('empty');
+    expect(await verifyCiPackages(http, safety, { packageTrees: ['ZPKG'] }, {}, true)).toMatchObject({
+      packageTrees: ['ZPKG'],
+    });
+    expect(post).not.toHaveBeenCalled();
+  });
   it.each([404, 405, 406, 415])('reports unavailable API for probe HTTP %s', async (status) => {
     const { http, get, post } = httpFor();
     get.mockRejectedValueOnce(new AdtApiError('missing', status, '/probe'));

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { diagnoseCiQualityFailed } from '../../../src/cli-checks.js';
 import { handleCiQuality } from '../../../src/handlers/diagnose-ci.js';
 import { getToolSchema } from '../../../src/handlers/schemas.js';
-import { textResult, toolJson } from '../../../src/handlers/shared.js';
+import { errorResult, textResult, toolJson } from '../../../src/handlers/shared.js';
 import { requestContext } from '../../../src/server/context.js';
 import { DEFAULT_CONFIG } from '../../../src/server/types.js';
 import { mockResponse } from '../../helpers/mock-fetch.js';
@@ -146,6 +146,62 @@ describe('CI action inputs and adapters', () => {
       vi.fn().mockResolvedValue(payload()),
     );
     expect(JSON.parse(result.content[0].text).results[0].reportXml).toBe('<testsuites/>');
+  });
+
+  it.each(['tool error', 'exception', 'invalid JSON', 'invalid counters', 'unknown outcome'])(
+    'preserves prior packages after a later %s',
+    async (failure) => {
+      const diagnose = vi.fn().mockResolvedValueOnce(payload());
+      if (failure === 'exception') diagnose.mockRejectedValueOnce(new Error('PRIVATE_SAP_DETAIL'));
+      else
+        diagnose.mockResolvedValueOnce(
+          failure === 'tool error'
+            ? errorResult('PRIVATE_SAP_DETAIL')
+            : failure === 'invalid JSON'
+              ? textResult('PRIVATE_SAP_DETAIL')
+              : failure === 'invalid counters'
+                ? textResult(toolJson({ summary: { tests: -1 } }))
+                : payload('unknown'),
+        );
+      const result = await handleCiQuality(
+        createClient(),
+        { action: 'unittest_ci', packages: ['ZA', 'ZB', 'ZC'] },
+        diagnose,
+      );
+      const data = JSON.parse(result.content[0].text);
+      expect(data).toMatchObject({
+        status: 'incomplete',
+        fail: true,
+        summary: { tests: 1 },
+        selectedPackages: 3,
+        processedPackages: 1,
+      });
+      expect(data.results).toHaveLength(3);
+      expect(data.results[0]).toMatchObject({ name: 'ZA', outcome: 'passed', summary: { tests: 1 } });
+      expect(data.results[1]).toMatchObject({ name: 'ZB', outcome: 'incomplete', attempted: true });
+      expect(data.results[2]).toMatchObject({ name: 'ZC', outcome: 'incomplete', attempted: false });
+      expect(diagnose).toHaveBeenCalledTimes(2);
+      expect(diagnoseCiQualityFailed({ action: 'unittest_ci' }, result)).toBe(true);
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_SAP_DETAIL');
+    },
+  );
+
+  it('retains every unattempted target after cancellation', async () => {
+    const controller = new AbortController();
+    const diagnose = vi.fn().mockImplementationOnce(async () => {
+      controller.abort();
+      return payload();
+    });
+    const result = await requestContext.run({ requestId: 'ci-abort', signal: controller.signal }, () =>
+      handleCiQuality(createClient(), { action: 'unittest_ci', packages: ['ZA', 'ZB', 'ZC'] }, diagnose),
+    );
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toMatchObject({ status: 'incomplete', fail: true, summary: { tests: 1 }, processedPackages: 1 });
+    expect(data.results.slice(1)).toEqual([
+      expect.objectContaining({ name: 'ZB', attempted: false, incompleteReason: 'cancelled' }),
+      expect.objectContaining({ name: 'ZC', attempted: false, incompleteReason: 'cancelled' }),
+    ]);
+    expect(diagnose).toHaveBeenCalledTimes(1);
   });
 
   it('passes the caller signal to the existing reconciliation handler', async () => {
